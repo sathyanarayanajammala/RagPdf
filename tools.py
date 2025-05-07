@@ -1,6 +1,7 @@
 from crewai.tools import tool as CrewAITool
 from langchain_community.tools import DuckDuckGoSearchRun
 import logging
+from config import PROMPTS
 
 logger = logging.getLogger('ibm_error_code_rag')
 
@@ -42,10 +43,7 @@ def format_content(content: str) -> str:
     try:
         from agents import llm  # Import here to avoid circular imports
         formatted = llm.invoke(
-            f"""Format the following technical content about IBM error codes for better readability.
-            Use proper markdown with headings, lists, and code blocks where appropriate:
-            
-            {content}"""
+           PROMPTS["formatting"]["content_format"].format(content=content)
         )
         return formatted.content
     except Exception as e:

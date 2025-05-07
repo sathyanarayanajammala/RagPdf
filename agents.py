@@ -6,7 +6,7 @@ from config import VECTOR_STORE_DIR, METADATA_FILE
 import json
 import logging
 from tools import search_vectorstore, web_search, format_content  # Import tools here
-from config import llm 
+from config import llm, PROMPTS   
 logger = logging.getLogger('ibm_error_code_rag')
 
 # Initialize embedding model
@@ -20,36 +20,31 @@ document_metadata = {}
 def create_ibm_expert_agent():
     """Create and return the IBM Error Code Expert agent"""
     return Agent(
-        role="IBM Error Code Expert",
-        goal="Find and explain IBM error codes accurately and clearly",
-        backstory="""You are an expert in IBM error codes with years of experience 
-        troubleshooting enterprise systems. Your expertise helps developers and 
-        system administrators quickly resolve issues.""",
+        role=PROMPTS["agent"]["ibm_expert"]["role"],
+        goal=PROMPTS["agent"]["ibm_expert"]["goal"],
+        backstory=PROMPTS["agent"]["ibm_expert"]["backstory"],
         verbose=True,
         allow_delegation=False,
-        tools=[search_vectorstore, web_search, format_content],
+        tools=[search_vectorstore, format_content],
         llm=llm,
         max_iter=5
     )
 
-def create_research_task(query, context, chat_history,ibm_expert):
-    """Create and return a research task for the agent"""
+def create_research_task(query, context, chat_history, agent):
+    # Ensure all required parameters are passed
+    if not all([query, agent]):
+        raise ValueError("Missing required parameters for task creation")
+    
+    description = PROMPTS["task"]["research"].format(
+        query=query,
+        context=context or "No relevant documents found",
+        chat_history=chat_history or "No prior conversation"
+    )
+    
     return Task(
-        description=f"""Research and provide a detailed explanation for the following IBM error code query:
-        
-        QUERY: {query}
-        
-        CONTEXT FROM DOCUMENTS:
-        {context}
-        
-        PREVIOUS CONVERSATION:
-        {chat_history}
-        
-        Provide a clear, detailed explanation of the error, its causes, and step-by-step troubleshooting 
-        instructions. Format your response using proper markdown with headings, lists, and code blocks 
-        where appropriate. Include examples where relevant.""",
-        agent=ibm_expert,
-        expected_output="A comprehensive, well-formatted explanation of the IBM error code with troubleshooting steps."
+        description=description,
+        agent=agent,
+        expected_output=PROMPTS["task"]["expected_output"]
     )
 
 def load_vector_store():
@@ -80,15 +75,29 @@ def save_vector_store():
     if vector_store:
         try:
             logger.info("Saving vector store...")
+            
+            # Ensure the directory exists
+            os.makedirs(VECTOR_STORE_DIR, exist_ok=True)
+            
+            # Save the vector store
             vector_store.save_local(VECTOR_STORE_DIR)
             
+            # Ensure the directory for metadata file exists
+            metadata_dir = os.path.dirname(METADATA_FILE)
+            if metadata_dir:
+                os.makedirs(metadata_dir, exist_ok=True)
+            
+            # Save metadata
             with open(METADATA_FILE, 'w') as f:
                 json.dump(document_metadata, f)
                 
-            logger.info("Vector store and metadata saved successfully")
+            logger.info(f"Vector store saved to {VECTOR_STORE_DIR}")
+            logger.info(f"Metadata saved to {METADATA_FILE}")
             return True
         except Exception as e:
-            logger.error(f"Error saving vector store: {e}")
+            logger.error(f"Error saving vector store: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             return False
     else:
         logger.warning("No vector store to save")

@@ -295,7 +295,7 @@ def research_agent(query):
         # Get context from vector store
         logger.info("Retrieving relevant documents from vector store...")
         retrieval_start = time.time()
-        docs = vector_store.similarity_search(query, k=3)
+        docs = vector_store.similarity_search(query, k=5)
         retrieval_time = time.time() - retrieval_start
         logger.info(f"Retrieved {len(docs)} documents in {retrieval_time:.2f} seconds")
 
@@ -344,7 +344,7 @@ def research_agent(query):
         
         # Update chat history
         chat_history.append((query, result))
-        clean_response = sanitize_for_chatbot(result.raw)
+        clean_response = result.raw
         return clean_response
 
     except Exception as e:

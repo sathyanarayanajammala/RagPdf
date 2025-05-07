@@ -55,3 +55,55 @@ METADATA_FILE = os.path.join(STORAGE_DIR, "metadata.json")
 # Create storage directories if they don't exist
 os.makedirs(STORAGE_DIR, exist_ok=True)
 os.makedirs(VECTOR_STORE_DIR, exist_ok=True)
+
+# config.py
+PROMPTS = {
+    "agent": {
+        "ibm_expert": {
+            "role": "IBM Error Code Expert",
+            "goal": "Find and explain IBM error codes accurately",
+            "backstory": "You're an expert in IBM error codes...",
+            "tools": ["search_vectorstore",  "format_content"]
+        }
+    },
+    "task": {
+        "research": """Research this IBM error code:
+
+Query: {query}
+
+Context from documents:
+{context}
+
+Conversation history:
+{chat_history}
+
+Provide:
+1. Error explanation
+2. Common causes
+3. Troubleshooting steps
+4. Related error codes""",
+        "expected_output": "Detailed technical explanation with markdown formatting"
+    },
+    "errors": {
+        "not_found": """I couldn't find information about {error_code} in our documentation.
+
+Please:
+1. Verify the exact error code
+2. Check IBM's official documentation
+3. Contact support with:
+   - Full error message
+   - System logs
+   - Steps to reproduce"""
+    },
+    "formatting": {
+        "content_format": """Convert this technical content to clean plain text:
+        {content}
+        
+        Requirements:
+        - Remove markdown formatting
+        - Keep error codes as-is (e.g. DSNB350I)
+        - Use simple bullet points
+        - Remove special characters except dashes"""
+    }
+
+}

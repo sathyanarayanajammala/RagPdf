@@ -55,17 +55,17 @@ A RAG (Retrieval-Augmented Generation) application for chatting with IBM Error c
 ##  Error outputs:
 
 ##  Error 1
-**IBM Db2 Error Code 00C20031
+# **IBM Db2 Error Code 00C20031
 
-Explanation:
+# Explanation:
 
 IBM Db2 error code 00C20031 indicates that a resource is not available. Specifically, it is often associated with a page latch timeout problem.
 
-System Action:
+# System Action:
 
 When this error occurs, the requesting execution unit is abended to take a diagnostic dump. It is then recovered to return an SQLCODE -904 (resource not available) to the user, along with the 00C20031 reason code. The resource name is also provided.
 
-User Response:
+# User Response:
 
 Contact the system programmer to determine why the resource is unavailable.
 Print the SYS1.LOGREC.
@@ -74,31 +74,31 @@ Problem Determination:
 
 This dump provides assistance for diagnosing the page latch timeout problem. Further investigation by the system programmer is needed to determine the root cause of the resource unavailability.
 
-Possible causes and further actions:
+# Possible causes and further actions:
 
 Page Latch Timeout: This suggests contention for a specific page in the database. Analyze the dump to identify the page and the processes involved.
 Resource Unavailability: The underlying resource (table space, index) might be offline or in an inconsistent state. Check the Db2 logs and system status to verify the resource's availability.
 Internal Db2 Error: While less common, this could point to an internal Db2 issue. If other troubleshooting steps fail, consider contacting IBM support.
 Related Error Codes:
 
-SQLCODE -904: This SQLCODE is returned to the user in conjunction with the 00C20031 reason code, indicating a resource is unavailable.
+# SQLCODE -904: This SQLCODE is returned to the user in conjunction with the 00C20031 reason code, indicating a resource is unavailable.
 Note:
 
 The 00C2010F dump provides assistance for diagnosing the page latch timeout problem. The 00C20031 reason code is returned as 'resource not available'.
 
 ## Error 2:
 
-**IBM Db2 Error Code 00C200A3
+# **IBM Db2 Error Code 00C200A3
 
-Explanation:
+# Explanation:
 
 This is a Db2/MVS internal error. The execution unit driving a buffer manager (BM) asynchronous function, which would normally run indefinitely, has been canceled. However, work being done by the execution unit is allowed to complete before the execution unit terminates.
 
-System Action:
+# System Action:
 
 The affected asynchronous function is terminated. If the affected function is the deferred write processor (DSNB1CMS), Db2 is abended with the abend code '00C200D3'.
 
-Operator Response:
+# Operator Response:
 
 Notify the system programmer.
 Print the SYS1.LOGREC.
@@ -108,10 +108,9 @@ System Programmer Response:
 
 If you suspect an error in Db2, you might need to report the problem. See "Collecting diagnostic data (Collecting data)" for information about identifying and reporting the problem.
 
-Problem Determination:
+# Problem Determination:
 
 Dynamic dump, taken to SYS1.DUMPxx data set, by Db2 (04E and 04F abends).
 A listing of the SYS1.LOGREC data set, obtained by executing IFCEREP1.
 
-Screen shots:
 

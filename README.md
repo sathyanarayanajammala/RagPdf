@@ -113,3 +113,39 @@ Dynamic dump, taken to SYS1.DUMPxx data set, by Db2 (04E and 04F abends).
 A listing of the SYS1.LOGREC data set, obtained by executing IFCEREP1.
 
 
+### New Error Format:
+
+
+##### Error Code: 00C10002
+
+
+##### Explanation:
+The Db2 call attachment facility control block (the CAB) indicated that a thread was present when it should not have been present.
+
+
+##### System Programmer Response:
+Collect a DSNTRACE trace stream and request a SYSABEND or SYSUDUMP dump.
+
+
+##### User Response:
+Notify your system programmer.
+
+
+##### Problem Determination:
+This is probably a call attachment facility error. 
+
+##### Error Code: 00C10201
+
+##### Explanation: 
+The application program passed two CONNECT calls to the call attachment facility (CAF) from the same TCB. The first CONNECT could have been either implicit or explicit.
+
+##### User response:
+You can continue processing with a corrected request.
+
+##### Problem determination:
+See the Explanation above.
+
+##### Additional context:
+
+If this is a call attachment facility error, collect a SYSABEND or SYSUDUMP dump and notify your system programmer.
+00C10005 Explanation: The application program passed an ECB address of 0 to the call attachment facility on a CONNECT call. Correct the application program that makes the CONNECT call to DSNALI and ensure a valid ECB address is used.

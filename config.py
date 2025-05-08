@@ -6,9 +6,12 @@ from crewai import LLM
 # Load environment variables from .env file
 load_dotenv()
 
+
 # Create logger
 logger = logging.getLogger('ibm_error_code_rag')
 # Set Google API key
+
+
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if not GOOGLE_API_KEY:
     logger.warning("GOOGLE_API_KEY not found in environment variables")
@@ -78,11 +81,29 @@ Conversation history:
 {chat_history}
 
 Provide:
-1. Error explanation
-2. Common causes
-3. Troubleshooting steps
-4. Related error codes""",
-        "expected_output": "Detailed technical explanation with markdown formatting"
+""",
+    "expected_output": """
+    Analyze this IBM error code documentation and extract information using these dynamic labels:
+    
+    Error Code: {query}
+    Document Content: {context}
+    
+    Extract and present the following information (if available):
+    
+    [Dynamic Label 1]: (Automatically identify the most relevant attribute from the content)
+    [Response for Dynamic Label 1]
+    
+    [Dynamic Label 2]: (Automatically identify the next relevant attribute)
+    [Response for Dynamic Label 2]
+    
+    [Dynamic Label 3]: (Continue with additional attributes as needed)
+    [Response for Dynamic Label 3]
+    
+    Guidelines:
+    1. Create clear labels based on content (e.g., "Error Severity", "Affected Components")
+    2. Only include labels for which you find information
+    3. Prioritize technical details from the documentation
+    """
     },
     "errors": {
         "not_found": """I couldn't find information about {error_code} in our documentation.

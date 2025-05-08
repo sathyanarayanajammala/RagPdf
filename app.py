@@ -9,7 +9,7 @@ from tqdm import tqdm
 import shutil
 from datetime import datetime
 import time
-import re
+import psutil
 
 # Suppress deprecation warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -34,6 +34,10 @@ from crewai.tools import tool as CrewAITool
 
 # Initialize chat history
 chat_history = []
+
+# Global state variables
+vector_store = None
+document_metadata = {}
 
 # Create a string handler to capture logs for display in the UI
 class StringIOHandler(logging.Handler):
@@ -60,14 +64,6 @@ console_handler = logging.StreamHandler()
 console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
 logger.addHandler(console_handler)
 
-
-
-# Initialize the vector store
-vector_store = None
-
-# Initialize document metadata storage
-document_metadata = {}
-
 # Create search tool instance
 search_tool = DuckDuckGoSearchRun()
 
@@ -75,7 +71,7 @@ search_tool = DuckDuckGoSearchRun()
 @CrewAITool
 def search_vectorstore(query: str) -> str:
     """Search the vector store for relevant documents about IBM error codes."""
-    global vector_store
+    # global vector_store
     if vector_store is None:
         return "Vector store is not initialized. Please upload documents first."
     
@@ -151,8 +147,9 @@ def process_pdf(file_path):
     return documents, total_pages
 
 # Process uploaded files and create vector store
+# Only the modified process_files function from app.py
 def process_files(files):
-    global vector_store, document_metadata
+    # global vector_store, document_metadata
 
     # Clear previous logs
     string_handler.clear()
@@ -164,7 +161,8 @@ def process_files(files):
         "total_chunks": 0,
         "processing_times": {},
         "embedding_times": {},
-        "total_time": 0
+        "total_time": 0,
+        "memory_usage": []
     }
 
     start_time = time.time()
@@ -172,104 +170,130 @@ def process_files(files):
 
     logger.info(f"Starting to process {len(files)} files")
 
+    # First process all files to extract documents
     for i, file in enumerate(files):
         file_name = os.path.basename(file.name)
         file_start_time = time.time()
         logger.info(f"Processing file {i+1}/{len(files)}: {file_name}")
 
-        documents, page_count = process_pdf(file.name)
-        all_documents.extend(documents)
+        try:
+            documents, page_count = process_pdf(file.name)
+            all_documents.extend(documents)
 
-        # Update stats
-        stats["total_pages"] += page_count
-        file_time = time.time() - file_start_time
-        stats["processing_times"][file_name] = {
-            "time_seconds": round(file_time, 2),
-            "pages": page_count,
-            "chunks": len(documents)
-        }
-        stats["total_chunks"] += len(documents)
+            # Update stats
+            stats["total_pages"] += page_count
+            file_time = time.time() - file_start_time
+            stats["processing_times"][file_name] = {
+                "time_seconds": round(file_time, 2),
+                "pages": page_count,
+                "chunks": len(documents)
+            }
+            stats["total_chunks"] += len(documents)
 
-        # Add to document metadata
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        document_metadata[file_name] = {
-            "filename": file_name,
-            "upload_time": timestamp,
-            "page_count": page_count,
-            "chunk_count": len(documents),
-            "processing_time": round(file_time, 2)
-        }
+            # Add to document metadata
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            document_metadata[file_name] = {
+                "filename": file_name,
+                "upload_time": timestamp,
+                "page_count": page_count,
+                "chunk_count": len(documents),
+                "processing_time": round(file_time, 2)
+            }
 
-        logger.info(f"Completed file {i+1}/{len(files)} in {file_time:.2f} seconds")
+            logger.info(f"Completed file {i+1}/{len(files)} in {file_time:.2f} seconds")
+            yield string_handler.get_logs(), "", stats, get_indexed_documents_html()
 
-        # Update logs and stats in UI
-        yield string_handler.get_logs(), "", stats, get_indexed_documents_html()
+        except Exception as e:
+            logger.error(f"Error processing file {file_name}: {str(e)}")
+            stats["processing_times"][file_name] = {
+                "error": str(e),
+                "time_seconds": round(time.time() - file_start_time, 2)
+            }
+            continue
 
-    logger.info(f"All files processed. Total documents: {len(all_documents)}")
+    if not all_documents:
+        error_msg = "No documents were processed from the uploaded files"
+        logger.error(error_msg)
+        yield string_handler.get_logs(), error_msg, stats, get_indexed_documents_html()
+        return
 
-    # Create vector store
+    # Create vector store in batches using merge_from
     logger.info("Starting to create FAISS vector store...")
     embedding_start = time.time()
 
-    # Count total tokens for embedding
-    total_tokens = sum(len(doc.page_content.split()) for doc in all_documents)
-    logger.info(f"Creating embeddings for {len(all_documents)} documents (approx. {total_tokens} tokens)")
-
-    # Process in batches to show progress
-    batch_size = min(100, max(1, len(all_documents) // 10))
-
+    # Calculate optimal batch size based on document count and memory
+    batch_size = min(100, max(10, len(all_documents) // 10))
     all_batches = [all_documents[i:i + batch_size] for i in range(0, len(all_documents), batch_size)]
 
-    # Initialize stats for vector store creation
     stats["vector_store"] = {
         "batch_count": len(all_batches),
         "batch_size": batch_size,
         "total_documents": len(all_documents),
-        "total_tokens": total_tokens,
         "batch_progress": 0
     }
 
-    for i, batch in enumerate(tqdm(all_batches, desc="Creating vector store", unit="batch")):
-        batch_start = time.time()
-        if i == 0 and vector_store is None:
-            vector_store = FAISS.from_documents(batch, embeddings)
-            logger.info(f"Initial vector store created with {len(batch)} documents")
+    try:
+        for i, batch in enumerate(tqdm(all_batches, desc="Creating vector store", unit="batch")):
+            batch_start = time.time()
+            
+            # Log memory usage before processing
+            
+            mem = psutil.virtual_memory()
+            stats["memory_usage"].append({
+                "batch": i+1,
+                "percent": mem.percent,
+                "available": round(mem.available/1024/1024, 1)
+            })
+            
+            # Create temporary FAISS index for this batch
+            batch_vector_store = FAISS.from_documents(batch, embeddings)
+            
+            if i == 0 and vector_store is None:
+                # First batch - just assign it
+                vector_store = batch_vector_store
+            else:
+                # Merge with existing index
+                vector_store.merge_from(batch_vector_store)
+            
+            batch_time = time.time() - batch_start
+            stats["embedding_times"][f"batch_{i+1}"] = round(batch_time, 2)
+            stats["vector_store"]["batch_progress"] = round((i + 1) / len(all_batches) * 100, 1)
+            
+            # Update logs periodically
+            if (i + 1) % 2 == 0 or (i + 1) == len(all_batches):
+                yield string_handler.get_logs(), "", stats, get_indexed_documents_html()
+
+        embedding_time = time.time() - embedding_start
+        total_time = time.time() - start_time
+
+        # Update final stats
+        stats["embedding_total_time"] = round(embedding_time, 2)
+        stats["total_time"] = round(total_time, 2)
+        stats["documents_per_second"] = round(len(all_documents) / total_time, 2)
+
+        logger.info(f"Vector store creation completed in {embedding_time:.2f} seconds")
+        logger.info(f"Total processing completed in {total_time:.2f} seconds")
+
+        # Save the vector store
+        if vector_store and len(all_documents) > 0:
+            save_result = save_vector_store()
+            if save_result:
+                logger.info("Vector store saved to disk successfully")
+            else:
+                logger.error("Failed to save vector store to disk")
         else:
-            vector_store.add_documents(batch)
-            logger.info(f"Added batch {i+1}/{len(all_batches)} to vector store. Progress: {((i+1) / len(all_batches)) * 100:.1f}%")
+            logger.warning("No documents to save to vector store")
 
-        # Update batch stats
-        batch_time = time.time() - batch_start
-        stats["embedding_times"][f"batch_{i+1}"] = round(batch_time, 2)
-        stats["vector_store"]["batch_progress"] = round((i + 1) / len(all_batches) * 100, 1)
+        completion_message = f"Processed {len(files)} files with {len(all_documents)} chunks in {total_time:.2f} seconds"
+        logger.info(completion_message)
 
-        # Update logs in UI periodically
-        if (i + 1) % 2 == 0 or (i + 1) == len(all_batches):
-            yield string_handler.get_logs(), "", stats, get_indexed_documents_html()
-
-    embedding_time = time.time() - embedding_start
-    total_time = time.time() - start_time
-
-    # Update final stats
-    stats["embedding_total_time"] = round(embedding_time, 2)
-    stats["total_time"] = round(total_time, 2)
-    stats["documents_per_second"] = round(len(all_documents) / total_time, 2)
-
-    logger.info(f"Vector store creation completed in {embedding_time:.2f} seconds")
-    logger.info(f"Total processing completed in {total_time:.2f} seconds")
-
-    # Save vector store
-    save_result = save_vector_store()
-    if save_result:
-        logger.info("Vector store saved to disk successfully")
-    else:
-        logger.warning("Failed to save vector store to disk")
-
-    completion_message = f"Processed {len(files)} files with {len(all_documents)} chunks in {total_time:.2f} seconds"
-    logger.info(completion_message)
-
-    yield string_handler.get_logs(), completion_message, stats, get_indexed_documents_html()
-
+        yield string_handler.get_logs(), completion_message, stats, get_indexed_documents_html()
+    
+    except Exception as e:
+        logger.error(f"Error during vector store creation: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        yield string_handler.get_logs(), f"Error: {str(e)}", stats, get_indexed_documents_html()
 # CrewAI Research Agent
 def research_agent(query):
     global vector_store, chat_history
@@ -353,13 +377,9 @@ def research_agent(query):
         chat_history.append((query, error_message))
         return error_message
 
-def sanitize_for_chatbot(markdown_text: str) -> str:
-    # Replace markdown headers (###, ##, #) with bold
-    response = markdown_text.replace("### ", "**").replace("## ", "**")
-    return response
-
 # Chat function
 def chat(message, history):
+    global vector_store
     if vector_store is None:
         logger.warning("Attempted to chat without uploading documents first")
         error_message = "Please upload IBM Error code PDF documents first."
@@ -380,27 +400,6 @@ def chat(message, history):
     return history + [[message, response]]
 
 # Clear vector store
-def clear_vector_store():
-    global vector_store, document_metadata
-    
-    logger.info("Clearing vector store and metadata...")
-    
-    # Clear in-memory objects
-    vector_store = None
-    document_metadata = {}
-    
-    # Remove directory contents
-    if os.path.exists(VECTOR_STORE_DIR):
-        shutil.rmtree(VECTOR_STORE_DIR)
-        os.makedirs(VECTOR_STORE_DIR)
-    
-    if os.path.exists(METADATA_FILE):
-        os.remove(METADATA_FILE)
-    
-    logger.info("Vector store and metadata cleared successfully")
-    
-    return string_handler.get_logs(), "Vector store cleared successfully", {}, "<p>No documents indexed yet.</p>"
-
 def refresh_log_display():
     return string_handler.get_logs()
 
@@ -408,13 +407,83 @@ def clear_chat_and_logs():
     string_handler.clear()
     logger.info("Chat history cleared")
     return [], string_handler.get_logs()
-
+def load_vector_store():
+    global vector_store, document_metadata
+    
+    if os.path.exists(VECTOR_STORE_DIR) and os.listdir(VECTOR_STORE_DIR):
+        logger.info("Found existing vector store. Loading...")
+        
+        vector_store  = FAISS.load_local(VECTOR_STORE_DIR, embeddings, allow_dangerous_deserialization=True)
+        logger.info("Vector store loaded successfully")
+        
+        if os.path.exists(METADATA_FILE):
+            with open(METADATA_FILE, 'r') as f:
+                document_metadata = json.load(f)
+            logger.info(f"Loaded metadata for {len(document_metadata)} documents") 
+    else:
+        logger.info("No existing vector store found")
+        return False
+    return True
+def save_vector_store():
+    global vector_store, document_metadata
+    
+    if vector_store:
+        try:
+            logger.info("Saving vector store...")
+            
+            # Ensure the storage directory exists
+            os.makedirs(STORAGE_DIR, exist_ok=True)
+            
+            # Ensure vector store directory exists and is empty
+            if os.path.exists(VECTOR_STORE_DIR):
+                # Clear directory contents but keep the directory
+                for item in os.listdir(VECTOR_STORE_DIR):
+                    item_path = os.path.join(VECTOR_STORE_DIR, item)
+                    if os.path.isfile(item_path):
+                        os.unlink(item_path)
+                    else:
+                        import shutil
+                        shutil.rmtree(item_path)
+            else:
+                os.makedirs(VECTOR_STORE_DIR, exist_ok=True)
+            
+            logger.info(f"Saving vector store to {VECTOR_STORE_DIR}")
+            # Save the vector store with explicit parameters
+            vector_store.save_local(
+                folder_path=VECTOR_STORE_DIR,
+                index_name="index"
+            )
+            
+            # Ensure the directory for metadata file exists
+            metadata_dir = os.path.dirname(METADATA_FILE)
+            if metadata_dir:
+                os.makedirs(metadata_dir, exist_ok=True)
+            
+            # Save metadata with proper error handling
+            try:
+                with open(METADATA_FILE, 'w') as f:
+                    json.dump(document_metadata, f)
+                logger.info(f"Metadata saved to {METADATA_FILE}")
+            except Exception as e:
+                logger.error(f"Error saving metadata: {str(e)}")
+                # Continue execution even if metadata save fails
+            
+            logger.info("Vector store saved successfully")
+            return True
+        except Exception as e:
+            logger.error(f"Error saving vector store: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return False
+    else:
+        logger.warning("No vector store to save")
+        return False
 def main():
     logger.info("Starting IBM Error Code PDF Chat Application")
     
     # Try to load existing vector store
-    load_success = load_vector_store()
-    if load_success:
+    load_vector_store()
+    if load_vector_store():
         logger.info(f"Successfully loaded existing vector store with {len(document_metadata)} documents")
     else:
         logger.info("No existing vector store found or failed to load")
@@ -423,7 +492,6 @@ def main():
     demo = create_ui(
         process_files_fn=process_files,
         chat_fn=chat,
-        clear_vector_store_fn=clear_vector_store,
         refresh_logs_fn=refresh_log_display,
         clear_chat_and_logs_fn=clear_chat_and_logs
     )
@@ -432,4 +500,6 @@ def main():
     logger.info("Application shutdown")
 
 if __name__ == "__main__":
+
+
     main()

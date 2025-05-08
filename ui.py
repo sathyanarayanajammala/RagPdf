@@ -1,11 +1,10 @@
 import gradio as gr
 from config import STORAGE_DIR, VECTOR_STORE_DIR, METADATA_FILE
-from agents import document_metadata
 import logging
 
 logger = logging.getLogger('ibm_error_code_rag')
 
-def create_ui(process_files_fn, chat_fn, clear_vector_store_fn, refresh_logs_fn, clear_chat_and_logs_fn):
+def create_ui(process_files_fn, chat_fn,  refresh_logs_fn, clear_chat_and_logs_fn):
     """Create and return the Gradio UI interface"""
     with gr.Blocks(theme="gradio/default") as demo:
         with gr.Row():
@@ -36,7 +35,7 @@ def create_ui(process_files_fn, chat_fn, clear_vector_store_fn, refresh_logs_fn,
             outputs=[log_output, status_text, stats_output, indexed_docs_html]
         )
         clear_store_button.click(
-            clear_vector_store_fn, 
+            # clear_vector_store_fn, 
             outputs=[log_output, status_text, stats_output, indexed_docs_html]
         )
         refresh_logs.click(refresh_logs_fn, outputs=log_output)
@@ -58,6 +57,7 @@ def create_ui(process_files_fn, chat_fn, clear_vector_store_fn, refresh_logs_fn,
     return demo
 
 def get_indexed_documents_html():
+    global document_metadata
     if not document_metadata:
         return "<p>No documents indexed yet.</p>"
     

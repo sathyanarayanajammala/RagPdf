@@ -30,12 +30,22 @@ def search_vectorstore(query: str) -> str:
 
 @CrewAITool
 def web_search(query: str) -> str:
-    """Search the web for information about IBM error codes."""
+    """Search IBM forums, documentation, and Mainframe communities for error code solutions."""
     try:
-        return search_tool.run(f"IBM error code {query}")
+        # Target IBM's official sites and communities
+        sites = [
+            "site:ibm.com",
+            "site:community.ibm.com",
+            "site:stackoverflow.com"
+        ]
+        site_filters = " OR ".join(sites)
+        search_query = f"IBM error code {query} ({site_filters})"
+        
+        result = search_tool.run(search_query)
+        return result if result else "No results found in IBM/Mainframe sources."
     except Exception as e:
-        logger.error(f"Error searching the web: {str(e)}")
-        return f"Error searching the web: {str(e)}"
+        logger.error(f"Web search error: {str(e)}")
+        return f"Search failed: {str(e)}"
 
 @CrewAITool
 def format_content(content: str) -> str:

@@ -71,7 +71,7 @@ search_tool = DuckDuckGoSearchRun()
 @CrewAITool
 def search_vectorstore(query: str) -> str:
     """Search the vector store for relevant documents about IBM error codes."""
-    # global vector_store
+    global vector_store
     if vector_store is None:
         return "Vector store is not initialized. Please upload documents first."
     
@@ -149,7 +149,7 @@ def process_pdf(file_path):
 # Process uploaded files and create vector store
 # Only the modified process_files function from app.py
 def process_files(files):
-    # global vector_store, document_metadata
+    global vector_store, document_metadata
 
     # Clear previous logs
     string_handler.clear()
@@ -201,7 +201,7 @@ def process_files(files):
             }
 
             logger.info(f"Completed file {i+1}/{len(files)} in {file_time:.2f} seconds")
-            yield string_handler.get_logs(), "", stats, get_indexed_documents_html()
+            yield string_handler.get_logs(), "", stats, get_indexed_documents_html(document_metadata)
 
         except Exception as e:
             logger.error(f"Error processing file {file_name}: {str(e)}")
@@ -214,7 +214,7 @@ def process_files(files):
     if not all_documents:
         error_msg = "No documents were processed from the uploaded files"
         logger.error(error_msg)
-        yield string_handler.get_logs(), error_msg, stats, get_indexed_documents_html()
+        yield string_handler.get_logs(), error_msg, stats, get_indexed_documents_html(document_metadata)
         return
 
     # Create vector store in batches using merge_from
@@ -261,7 +261,7 @@ def process_files(files):
             
             # Update logs periodically
             if (i + 1) % 2 == 0 or (i + 1) == len(all_batches):
-                yield string_handler.get_logs(), "", stats, get_indexed_documents_html()
+                yield string_handler.get_logs(), "", stats, get_indexed_documents_html(document_metadata)
 
         embedding_time = time.time() - embedding_start
         total_time = time.time() - start_time
@@ -287,13 +287,13 @@ def process_files(files):
         completion_message = f"Processed {len(files)} files with {len(all_documents)} chunks in {total_time:.2f} seconds"
         logger.info(completion_message)
 
-        yield string_handler.get_logs(), completion_message, stats, get_indexed_documents_html()
+        yield string_handler.get_logs(), completion_message, stats, get_indexed_documents_html(document_metadata)
     
     except Exception as e:
         logger.error(f"Error during vector store creation: {str(e)}")
         import traceback
         logger.error(traceback.format_exc())
-        yield string_handler.get_logs(), f"Error: {str(e)}", stats, get_indexed_documents_html()
+        yield string_handler.get_logs(), f"Error: {str(e)}", stats, get_indexed_documents_html(document_metadata)
 # CrewAI Research Agent
 def research_agent(query):
     global vector_store, chat_history

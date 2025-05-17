@@ -56,8 +56,8 @@ def create_ui(process_files_fn, chat_fn,  refresh_logs_fn, clear_chat_and_logs_f
 
     return demo
 
-def get_indexed_documents_html():
-    global document_metadata
+def get_indexed_documents_html(document_metadata):
+    #global document_metadata
     if not document_metadata:
         return "<p>No documents indexed yet.</p>"
     

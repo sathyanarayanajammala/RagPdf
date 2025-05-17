@@ -60,17 +60,18 @@ os.makedirs(STORAGE_DIR, exist_ok=True)
 os.makedirs(VECTOR_STORE_DIR, exist_ok=True)
 
 # config.py
+# config.py
 PROMPTS = {
     "agent": {
         "ibm_expert": {
             "role": "IBM Error Code Expert",
-            "goal": "Find and explain IBM error codes accurately",
-            "backstory": "You're an expert in IBM error codes...",
-            "tools": ["search_vectorstore",  "format_content"]
+            "goal": "Find and explain IBM error codes by dynamically identifying key information from all sources",
+            "backstory": "You're an expert in IBM error codes who intelligently analyzes documentation and web resources to extract the most relevant information, creating dynamic labels based on content.",
+            "tools": ["search_vectorstore", "web_search", "format_content"]
         }
     },
     "task": {
-        "research": """Research this IBM error code:
+        "research": """Analyze this IBM error code from all available sources and identify key information:
 
 Query: {query}
 
@@ -80,30 +81,40 @@ Context from documents:
 Conversation history:
 {chat_history}
 
-Provide:
-""",
-    "expected_output": """
-    Analyze this IBM error code documentation and extract information using these dynamic labels:
-    
-    Error Code: {query}
-    Document Content: {context}
-    
-    Extract and present the following information (if available):
-    
-    [Dynamic Label 1]: (Automatically identify the most relevant attribute from the content)
-    [Response for Dynamic Label 1]
-    
-    [Dynamic Label 2]: (Automatically identify the next relevant attribute)
-    [Response for Dynamic Label 2]
-    
-    [Dynamic Label 3]: (Continue with additional attributes as needed)
-    [Response for Dynamic Label 3]
-    
-    Guidelines:
-    1. Create clear labels based on content (e.g., "Error Severity", "Affected Components")
-    2. Only include labels for which you find information
-    3. Prioritize technical details from the documentation
-    """
+Instructions:
+1. Must provide the output for asked code only.
+2. Dynamically create labels based on content
+3. Combine information from documents and web under matching labels
+4. Summarize when multiple sources provide similar information
+5. Keep response concise (max 15 lines total)
+6. Mark web-sourced information with (web)""",
+
+        "expected_output": """
+        Analyze the content and present information using these dynamic guidelines:
+
+        Error Code: {query}
+        Content Sources: {context}
+
+        [Dynamically Identified Label 1]:
+        - Consolidated information from all sources
+        - Summary when similar info exists
+        
+        [Dynamically Identified Label 2]:
+        - Merged details from documents and web
+        - Web sources marked with (web)
+        
+        [Dynamically Identified Label 3]:
+        - Additional relevant information
+        - Keep concise
+
+        Rules:
+        1. Create labels based on content attributes (e.g., "Error Severity", "Affected Components")
+        2. Only include labels with actual information
+        3. Merge duplicate information under same label
+        4. Maximum 3-10 most important labels
+        5. MUST keep within 15 line limit for entire response
+        6. Prioritize technical details from documentation
+        7. Web supplements marked with (web)"""
     },
     "errors": {
         "not_found": """I couldn't find information about {error_code} in our documentation.
@@ -117,14 +128,14 @@ Please:
    - Steps to reproduce"""
     },
     "formatting": {
-        "content_format": """Convert this technical content to clean plain text:
+        "content_format": """Convert this technical content to clean format:
         {content}
         
         Requirements:
-        - Remove markdown formatting
-        - Keep error codes as-is (e.g. DSNB350I)
-        - Use simple bullet points
-        - Remove special characters except dashes"""
+        - Maintain dynamic labeling
+        - Merge similar information
+        - Keep error codes intact
+        - Remove redundant details
+        - Mark web sources with (web)"""
     }
-
 }
